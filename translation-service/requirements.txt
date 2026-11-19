@@ -1,0 +1,12 @@
+fastapi==0.115.12
+uvicorn[standard]==0.34.0
+transformers==4.44.2
+sentencepiece==0.2.0
+sacremoses==0.1.1
+IndicTransToolkit==1.1.1
+python-docx==1.1.2
+lxml==5.3.0
+PyMuPDF==1.24.14
+odfpy==1.4.1
+Pillow==10.4.0
+pytesseract==0.3.13
