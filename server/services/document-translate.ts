@@ -1,4 +1,3 @@
-import http from 'node:http';
 import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
@@ -109,69 +108,41 @@ function engineUrl() {
   return new URL(process.env.TRANSLATION_SERVICE_URL || 'http://127.0.0.1:8001');
 }
 
-function requestEngine(job: DocumentJob, buffer: Buffer) {
-  const url = engineUrl();
-  return new Promise<{ status: number; body: Buffer }>((resolve, reject) => {
-    const request = http.request(
-      {
-        hostname: url.hostname,
-        port: url.port || 80,
-        path: `/document/translate?job_id=${encodeURIComponent(job.id)}`,
-        method: 'POST',
-        headers: {
-          'content-type': 'application/octet-stream',
-          'content-length': buffer.length,
-          'x-filename': job.inputType === 'PDF' ? 'document.pdf' : 'document.docx',
-          'x-output-format': job.outputFormat.toLowerCase(),
-          'x-source': job.source,
-          'x-target': job.target,
-          'x-work-dir': path.dirname(job.originalPath),
-        },
-      },
-      (response) => {
-        const chunks: Buffer[] = [];
-        response.on('data', (chunk: Buffer) => chunks.push(chunk));
-        response.on('end', () =>
-          resolve({ status: response.statusCode || 500, body: Buffer.concat(chunks) }),
-        );
-      },
-    );
-    request.on('error', reject);
-    request.setTimeout(0);
-    request.end(buffer);
+async function requestEngine(job: DocumentJob, buffer: Buffer) {
+  const url = new URL(
+    `/document/translate?job_id=${encodeURIComponent(job.id)}`,
+    engineUrl(),
+  );
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/octet-stream',
+      'content-length': String(buffer.length),
+      'x-filename': job.inputType === 'PDF' ? 'document.pdf' : 'document.docx',
+      'x-output-format': job.outputFormat.toLowerCase(),
+      'x-source': job.source,
+      'x-target': job.target,
+      'x-work-dir': path.dirname(job.originalPath),
+      'x-return-file': '1',
+    },
+    body: new Uint8Array(buffer),
   });
+  return { status: response.status, body: Buffer.from(await response.arrayBuffer()) };
 }
 
-function readEngineProgress(id: string) {
-  const url = engineUrl();
-  return new Promise<{ stage?: string; progress?: number; message?: string } | null>((resolve) => {
-    const request = http.request(
-      {
-        hostname: url.hostname,
-        port: url.port || 80,
-        path: `/document/jobs/${encodeURIComponent(id)}`,
-        method: 'GET',
-      },
-      (response) => {
-        const chunks: Buffer[] = [];
-        response.on('data', (chunk: Buffer) => chunks.push(chunk));
-        response.on('end', () => {
-          if ((response.statusCode || 500) !== 200) return resolve(null);
-          try {
-            resolve(JSON.parse(Buffer.concat(chunks).toString('utf8')));
-          } catch {
-            resolve(null);
-          }
-        });
-      },
+async function readEngineProgress(
+  id: string,
+): Promise<{ stage?: string; progress?: number; message?: string } | null> {
+  try {
+    const response = await fetch(
+      new URL(`/document/jobs/${encodeURIComponent(id)}`, engineUrl()),
+      { signal: AbortSignal.timeout(4000) },
     );
-    request.on('error', () => resolve(null));
-    request.setTimeout(4000, () => {
-      request.destroy();
-      resolve(null);
-    });
-    request.end();
-  });
+    if (response.status !== 200) return null;
+    return (await response.json()) as { stage?: string; progress?: number; message?: string };
+  } catch {
+    return null;
+  }
 }
 
 function publicView(job: DocumentJob) {
@@ -220,6 +191,7 @@ async function runJob(job: DocumentJob, buffer: Buffer) {
 
     const payload = JSON.parse(response.body.toString('utf8')) as {
       output?: string;
+      file?: string;
       meta?: {
         stats?: Record<string, unknown>;
         warnings?: string[];
@@ -232,6 +204,11 @@ async function runJob(job: DocumentJob, buffer: Buffer) {
     }
 
     const translatedPath = path.join(path.dirname(job.originalPath), path.basename(payload.output));
+    if (typeof payload.file === 'string' && payload.file.length > 0) {
+      // The engine ran on another machine, so it sends the file back instead of
+      // writing into this server's storage directory.
+      await fsp.writeFile(translatedPath, Buffer.from(payload.file, 'base64'));
+    }
     await fsp.access(translatedPath);
 
     const stats = payload.meta?.stats || {};

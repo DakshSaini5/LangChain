@@ -1,6 +1,8 @@
 import os
+import base64
 import csv
 import json
+import tempfile
 import re
 import threading
 import time
@@ -280,8 +282,12 @@ async def document_translate(request: Request):
         raise HTTPException(status_code=400, detail="Unsupported target language.")
 
     directory = Path(work_dir).resolve() if work_dir else None
-    if directory is None or not directory.is_dir():
-        raise HTTPException(status_code=400, detail="Invalid document workspace.")
+    if directory is not None and not directory.is_dir():
+        directory = None
+    if directory is None:
+        # The API server may run on a different machine, so its workspace does not
+        # exist here. Work in a local temp directory and return the file contents.
+        directory = Path(tempfile.mkdtemp(prefix="langchang-"))
 
     def do_translate(source_code: str, target_code: str, texts: list[str]) -> list[str]:
         return translate_texts(source_code, target_code, texts)
@@ -319,6 +325,8 @@ async def document_translate(request: Request):
     (directory / output_name).write_bytes(output)
 
     payload = {"output": output_name, "meta": meta, "warnings": warnings}
+    if request.headers.get("x-return-file") == "1":
+        payload["file"] = base64.b64encode(output).decode("ascii")
     (directory / "meta.json").write_text(json.dumps(payload, ensure_ascii=True), encoding="utf-8")
     _report_progress(job_id, "completed", 100, "Translation complete")
     return payload
