@@ -10,6 +10,7 @@ import {
   X,
 } from 'lucide-react';
 import { DiffText } from './textDiff';
+import { api } from './apiBase';
 
 type Operation = 'clarity' | 'proofread' | 'formal' | 'simplify' | 'rewrite' | 'summary';
 
@@ -81,7 +82,7 @@ export default function WritingAssistant({ notify }: Props) {
     setError('');
     setSetupNeeded(false);
     try {
-      const response = await fetch('/api/assist', {
+      const response = await fetch(api('/api/assist'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text, operation }),

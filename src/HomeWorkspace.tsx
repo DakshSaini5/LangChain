@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type DragEvent } from 'react';
+import { api } from './apiBase';
 import {
   AlertTriangle,
   Check,
@@ -147,7 +148,7 @@ export default function HomeWorkspace({ notify }: Props) {
     form.append('outputFormat', format);
 
     const request = new XMLHttpRequest();
-    request.open('POST', '/api/documents/translate');
+    request.open('POST', api('/api/documents/translate'));
     request.responseType = 'json';
     request.upload.onprogress = (event) => {
       if (event.lengthComputable) {
@@ -179,7 +180,7 @@ export default function HomeWorkspace({ notify }: Props) {
     let cancelled = false;
     const timer = window.setInterval(async () => {
       try {
-        const response = await fetch(`/api/documents/jobs/${jobId}`);
+        const response = await fetch(api(`/api/documents/jobs/${jobId}`));
         const payload = await response.json();
         if (cancelled) return;
         if (!response.ok) {
@@ -486,7 +487,7 @@ export default function HomeWorkspace({ notify }: Props) {
                   <div className="dt-result-actions">
                     <a
                       className="primary-button"
-                      href={`/api/documents/jobs/${job.id}/download`}
+                      href={api(`/api/documents/jobs/${job.id}/download`)}
                       download={job.translatedName || undefined}
                     >
                       <Download size={15} /> Download {job.outputFormat}

@@ -13,6 +13,7 @@ import {
   X,
 } from 'lucide-react';
 import { DiffText } from './textDiff';
+import { api } from './apiBase';
 
 type Tone = 'professional' | 'friendly' | 'concise' | 'apologetic' | 'persuasive';
 type Length = 'shorter' | 'same' | 'longer';
@@ -131,7 +132,7 @@ export default function EmailWorkspace({ notify }: Props) {
     setPreview(null);
     setShowChanges(false);
     try {
-      const response = await fetch('/api/email/polish', {
+      const response = await fetch(api('/api/email/polish'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ subject: subject.trim(), body: body.trim(), tone, length }),
@@ -175,7 +176,7 @@ export default function EmailWorkspace({ notify }: Props) {
     }
     setTranslating(true);
     try {
-      const response = await fetch('/api/translate', {
+      const response = await fetch(api('/api/translate'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text, source, target, mode: 'email' }),
